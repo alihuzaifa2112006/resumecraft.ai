@@ -322,98 +322,19 @@ export default function DashboardPage() {
     <Box sx={{ minHeight: "100vh", bgcolor: "#F8FAFC" }}>
       <DashboardNav user={user} onLogout={handleLogout} />
 
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: { xs: "flex-start", sm: "center" },
-            flexDirection: { xs: "column", sm: "row" },
-            gap: 2,
-            mb: 4,
-          }}
-        >
-          <Box>
-            <Typography variant="h4" fontWeight={700} color="text.primary" mb={0.5}>
-              Welcome back, {user.name.split(" ")[0]}!
-            </Typography>
-            <Typography variant="body1">
-              Manage your resumes and create new ones.
-            </Typography>
-          </Box>
-          <Button variant="contained" startIcon={<AddIcon />} sx={{ px: 3 }}>
-            New Resume
-          </Button>
-        </Box>
-
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            mb: 3,
-          }}
-        >
-          <FolderOpenIcon sx={{ color: "text.secondary", fontSize: 20 }} />
-          <Typography variant="h6" fontWeight={600} color="text.primary">
-            My Resumes
+      <Container maxWidth="lg" sx={{ py: 12, display: "flex", justifyContent: "center" }}>
+        <Paper sx={{ p: 6, textAlign: "center", borderRadius: 3, width: "100%", maxWidth: 720 }}>
+          <Typography variant="h4" fontWeight={800} mb={1}>
+            Browse Templates
           </Typography>
-          <Chip
-            label={sampleResumes.length}
-            size="small"
-            sx={{
-              fontWeight: 700,
-              fontSize: "0.75rem",
-              height: 22,
-              bgcolor: "#E3F2FD",
-              color: "primary.main",
-            }}
-          />
-        </Box>
-
-        <Grid container spacing={3}>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <CreateNewCard />
-          </Grid>
-          {sampleResumes.map((resume) => (
-            <Grid size={{ xs: 12, sm: 6, md: 3 }} key={resume.id}>
-              <ResumeCard resume={resume} />
-            </Grid>
-          ))}
-        </Grid>
-
-        <Paper
-          sx={{
-            mt: 6,
-            p: 4,
-            borderRadius: 3,
-            background: "linear-gradient(135deg, #0D47A1 0%, #1565C0 40%, #1E88E5 100%)",
-            display: "flex",
-            alignItems: { xs: "flex-start", md: "center" },
-            justifyContent: "space-between",
-            flexDirection: { xs: "column", md: "row" },
-            gap: 3,
-          }}
-        >
-          <Box>
-            <Typography variant="h5" fontWeight={700} color="white" mb={0.5}>
-              Ready to build your next resume?
-            </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
-              Choose from professional templates and let AI help you craft the perfect resume.
-            </Typography>
-          </Box>
+          <Typography variant="body1" color="text.secondary" mb={4}>
+            Choose from professionally designed templates to start building your resume.
+          </Typography>
           <Button
             variant="contained"
             startIcon={<DescriptionIcon />}
-            sx={{
-              bgcolor: "white",
-              color: "primary.dark",
-              fontWeight: 700,
-              px: 3,
-              whiteSpace: "nowrap",
-              "&:hover": { bgcolor: "grey.100" },
-            }}
+            sx={{ px: 4 }}
+            onClick={() => router.push("/templates")}
           >
             Browse Templates
           </Button>
