@@ -181,7 +181,7 @@ export default function TemplatesPage() {
 
         <Grid container spacing={3}>
           {TEMPLATES.map((t) => (
-            <Grid key={t.id} item xs={12} sm={6} md={4}>
+            <Grid key={t.id} size={{ xs: 12, sm: 6, md: 4 }}>
               <Card 
                 elevation={0} 
                 sx={{ 
