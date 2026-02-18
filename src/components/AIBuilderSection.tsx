@@ -1,3 +1,6 @@
+"use client";
+
+import { useRouter } from "next/navigation";
 import {
   Box,
   Container,
@@ -106,6 +109,8 @@ function AIPreview() {
 }
 
 export default function AIBuilderSection() {
+  const router = useRouter();
+
   return (
     <Box sx={{ py: { xs: 8, md: 12 }, bgcolor: "#F8FAFC" }}>
       <Container maxWidth="lg">
@@ -153,6 +158,7 @@ export default function AIBuilderSection() {
               size="large"
               endIcon={<ArrowForwardIcon />}
               sx={{ px: 4 }}
+              onClick={() => router.push("/builder/modern")}
             >
               Start Building
             </Button>
