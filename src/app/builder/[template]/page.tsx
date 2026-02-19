@@ -5,6 +5,23 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Box,
   Typography,
   Button,
@@ -35,6 +52,8 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DownloadIcon from "@mui/icons-material/Download";
 import SaveIcon from "@mui/icons-material/Save";
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import ViewListIcon from "@mui/icons-material/ViewList";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 import EmailIcon from "@mui/icons-material/Email";
@@ -43,9 +62,15 @@ import LocationOnIcon from "@mui/icons-material/LocationOn";
 
 // ─── Constants ────────────────────────────────────────
 
-const COLORS = [
+const ACCENT_COLORS = [
   "#1565C0", "#E94560", "#2E7D32", "#6C63FF", "#E65100",
   "#00838F", "#AD1457", "#4527A0", "#1A1A2E", "#37474F",
+];
+
+const TEXT_COLORS = [
+  "#000000", "#1A1A1A", "#2C2C2C", "#333333", "#444444",
+  "#555555", "#1B2631", "#2C3E50", "#34495E", "#4A235A",
+  "#154360", "#0B5345", "#7B241C", "#784212", "#1C2833",
 ];
 
 const FONTS = [
@@ -57,6 +82,18 @@ const FONTS = [
   { name: "Georgia", value: "Georgia, serif" },
 ];
 
+const DEFAULT_SECTION_ORDER: SectionKey[] = [
+  "summary", "experience", "education", "certifications", "skills",
+];
+
+const SECTION_LABELS: Record<SectionKey, string> = {
+  summary: "Professional Summary",
+  experience: "Work Experience",
+  education: "Education",
+  certifications: "Certifications",
+  skills: "Skills",
+};
+
 const STEPS = [
   { label: "Colors", icon: <PaletteIcon /> },
   { label: "Fonts", icon: <TextFieldsIcon /> },
@@ -66,9 +103,12 @@ const STEPS = [
   { label: "Education", icon: <SchoolIcon /> },
   { label: "Certifications", icon: <CardMembershipIcon /> },
   { label: "Skills", icon: <BuildIcon /> },
+  { label: "Layout", icon: <ViewListIcon /> },
 ];
 
 // ─── Types ────────────────────────────────────────────
+
+type SectionKey = "summary" | "experience" | "education" | "certifications" | "skills";
 
 interface Experience {
   company: string;
@@ -92,6 +132,7 @@ interface Certification {
 
 interface ResumeData {
   color: string;
+  textColor: string;
   font: string;
   name: string;
   title: string;
@@ -104,6 +145,7 @@ interface ResumeData {
   education: Education[];
   certifications: Certification[];
   skills: string[];
+  sectionOrder: SectionKey[];
 }
 
 type OnChange = (d: Partial<ResumeData>) => void;
@@ -131,8 +173,8 @@ function ColorStep({ data, onChange }: { data: ResumeData; onChange: OnChange })
       <Typography variant="body2" color="text.secondary" mb={3}>
         This color will be used for headings, accents, and highlights in your resume.
       </Typography>
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
-        {COLORS.map((c) => (
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, mb: 4 }}>
+        {ACCENT_COLORS.map((c) => (
           <Box
             key={c}
             onClick={() => onChange({ color: c })}
@@ -155,6 +197,74 @@ function ColorStep({ data, onChange }: { data: ResumeData; onChange: OnChange })
           </Box>
         ))}
       </Box>
+
+      <Typography variant="h5" fontWeight={700} mb={1}>
+        Choose your text color
+      </Typography>
+      <Typography variant="body2" color="text.secondary" mb={3}>
+        This color will be used for body text, descriptions, and secondary content.
+      </Typography>
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, mb: 3 }}>
+        {TEXT_COLORS.map((c) => (
+          <Box
+            key={c}
+            onClick={() => onChange({ textColor: c })}
+            sx={{
+              width: 48,
+              height: 48,
+              borderRadius: 2,
+              bgcolor: c,
+              cursor: "pointer",
+              border: data.textColor === c ? "3px solid" : "3px solid transparent",
+              borderColor: data.textColor === c ? "warning.main" : "transparent",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "transform 0.15s",
+              "&:hover": { transform: "scale(1.1)" },
+            }}
+          >
+            {data.textColor === c && <CheckCircleIcon sx={{ color: "white", fontSize: 22 }} />}
+          </Box>
+        ))}
+      </Box>
+
+      <Typography variant="body2" color="text.secondary" mb={1}>
+        Or pick a custom text color:
+      </Typography>
+      <Stack direction="row" spacing={2} alignItems="center">
+        <Box
+          component="input"
+          type="color"
+          value={data.textColor}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ textColor: e.target.value })}
+          sx={{
+            width: 56,
+            height: 56,
+            border: "2px solid",
+            borderColor: "grey.300",
+            borderRadius: 2,
+            cursor: "pointer",
+            p: 0.5,
+            bgcolor: "transparent",
+          }}
+        />
+        <Box>
+          <Typography variant="body2" fontWeight={600}>{data.textColor}</Typography>
+          <Typography variant="caption" color="text.secondary">Current text color</Typography>
+        </Box>
+      </Stack>
+
+      {/* Preview */}
+      <Paper elevation={0} sx={{ mt: 3, p: 2, border: "1px solid", borderColor: "grey.200", borderRadius: 2 }}>
+        <Typography variant="body2" fontWeight={600} mb={1}>Preview</Typography>
+        <Typography sx={{ color: data.color, fontWeight: 700, fontSize: "1rem", mb: 0.5 }}>
+          Section Heading (Accent)
+        </Typography>
+        <Typography sx={{ color: data.textColor, fontSize: "0.85rem" }}>
+          This is how your body text will look with the selected text color. Make sure it has enough contrast for readability.
+        </Typography>
+      </Paper>
     </Box>
   );
 }
@@ -414,15 +524,191 @@ function SkillsStep({ data, onChange }: { data: ResumeData; onChange: OnChange }
   );
 }
 
+// ─── Drag & Drop Layout Step ──────────────────────────
+
+function SortableItem({ id, label }: { id: string; label: string }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <Paper
+      ref={setNodeRef}
+      style={style}
+      elevation={isDragging ? 8 : 0}
+      sx={{
+        p: 2,
+        px: 2.5,
+        border: "1px solid",
+        borderColor: isDragging ? "primary.main" : "grey.200",
+        borderRadius: 2,
+        bgcolor: isDragging ? "primary.50" : "white",
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+        cursor: "grab",
+        userSelect: "none",
+        transition: "box-shadow 0.2s, border-color 0.2s",
+        "&:hover": { borderColor: "primary.light", bgcolor: "grey.50" },
+        "&:active": { cursor: "grabbing" },
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <DragIndicatorIcon sx={{ color: isDragging ? "primary.main" : "grey.400", fontSize: 22 }} />
+      <Typography fontWeight={600} sx={{ flex: 1 }}>{label}</Typography>
+      <Typography variant="caption" color="text.secondary">Drag to reorder</Typography>
+    </Paper>
+  );
+}
+
+function LayoutStep({ data, onChange }: { data: ResumeData; onChange: OnChange }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = data.sectionOrder.indexOf(active.id as SectionKey);
+    const newIndex = data.sectionOrder.indexOf(over.id as SectionKey);
+    onChange({ sectionOrder: arrayMove(data.sectionOrder, oldIndex, newIndex) });
+  }
+
+  return (
+    <Box>
+      <Typography variant="h5" fontWeight={700} mb={1}>
+        Arrange Sections
+      </Typography>
+      <Typography variant="body2" color="text.secondary" mb={3}>
+        Drag and drop to reorder the sections in your resume. The order here will be reflected in your CV preview and final PDF.
+      </Typography>
+
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={data.sectionOrder} strategy={verticalListSortingStrategy}>
+          <Stack spacing={1.5}>
+            {data.sectionOrder.map((key) => (
+              <SortableItem key={key} id={key} label={SECTION_LABELS[key]} />
+            ))}
+          </Stack>
+        </SortableContext>
+      </DndContext>
+
+      <Paper elevation={0} sx={{ mt: 3, p: 2, bgcolor: "#F0F6FF", borderRadius: 2, border: "1px solid", borderColor: "primary.100" }}>
+        <Typography variant="body2" color="primary.dark" fontWeight={600} mb={0.5}>
+          Current order:
+        </Typography>
+        {data.sectionOrder.map((key, i) => (
+          <Typography key={key} variant="body2" color="text.secondary">
+            {i + 1}. {SECTION_LABELS[key]}
+          </Typography>
+        ))}
+      </Paper>
+    </Box>
+  );
+}
+
 // ─── CV Preview Templates ─────────────────────────────
-// Only show sections that have real content (not empty placeholder entries)
+
+function PlaceholderContent({ color, accentColor, font }: { color: string; accentColor: string; font: string }) {
+  return (
+    <Box sx={{ opacity: 0.5 }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: font, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: accentColor, mb: 0.5 }}>
+          Profile
+        </Typography>
+        <Typography sx={{ fontFamily: font, fontSize: 8.5, color, lineHeight: 1.6 }}>
+          Passionate professional with extensive experience in the industry. Add your summary to replace this placeholder text and showcase your unique value proposition.
+        </Typography>
+      </Box>
+      <Box sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: font, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: accentColor, mb: 0.8 }}>
+          Experience
+        </Typography>
+        <Box sx={{ mb: 1.5, borderLeft: `2px solid ${accentColor}`, pl: 1.2 }}>
+          <Typography sx={{ fontFamily: font, fontSize: 10, fontWeight: 700, color }}>Senior Software Engineer</Typography>
+          <Typography sx={{ fontFamily: font, fontSize: 8.5, color: accentColor, fontWeight: 600 }}>Tech Company Inc.</Typography>
+          <Typography sx={{ fontFamily: font, fontSize: 7.5, color }}>Jan 2022 — Present</Typography>
+          <Typography sx={{ fontFamily: font, fontSize: 8, color, mt: 0.3, lineHeight: 1.5 }}>
+            Led development of key features and mentored junior developers. Add your experience to replace this preview.
+          </Typography>
+        </Box>
+      </Box>
+      <Box>
+        <Typography sx={{ fontFamily: font, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: accentColor, mb: 0.5 }}>
+          Skills
+        </Typography>
+        <Typography sx={{ fontFamily: font, fontSize: 8.5, color }}>
+          React • TypeScript • Node.js • Python • AWS • Docker
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
+function hasRealContent(data: ResumeData) {
+  return (
+    data.summary ||
+    data.experience.some(hasContent) ||
+    data.education.some(hasEduContent) ||
+    data.certifications.some(hasCertContent) ||
+    data.skills.length > 0
+  );
+}
 
 function ModernCV({ data }: { data: ResumeData }) {
   const c = data.color;
+  const tc = data.textColor;
   const f = data.font;
   const filledExp = data.experience.filter(hasContent);
   const filledEdu = data.education.filter(hasEduContent);
   const filledCert = data.certifications.filter(hasCertContent);
+  const showPlaceholder = !hasRealContent(data);
+
+  const sectionRenderers: Record<SectionKey, React.ReactNode> = {
+    summary: data.summary ? (
+      <Box key="summary" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: c, mb: 0.5 }}>
+          Profile
+        </Typography>
+        <Typography sx={{ fontFamily: f, fontSize: 8.5, color: tc, lineHeight: 1.6 }}>{data.summary}</Typography>
+      </Box>
+    ) : null,
+    experience: filledExp.length > 0 ? (
+      <Box key="experience" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: c, mb: 0.8 }}>
+          Experience
+        </Typography>
+        {filledExp.map((exp, i) => (
+          <Box key={i} sx={{ mb: 1.5, borderLeft: `2px solid ${c}`, pl: 1.2 }}>
+            <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, color: tc }}>{exp.position}</Typography>
+            <Typography sx={{ fontFamily: f, fontSize: 8.5, color: c, fontWeight: 600 }}>{exp.company}</Typography>
+            {(exp.startDate || exp.endDate) && (
+              <Typography sx={{ fontFamily: f, fontSize: 7.5, color: tc }}>{exp.startDate} — {exp.endDate}</Typography>
+            )}
+            {exp.description && (
+              <Typography sx={{ fontFamily: f, fontSize: 8, color: tc, mt: 0.3, lineHeight: 1.5 }}>{exp.description}</Typography>
+            )}
+          </Box>
+        ))}
+      </Box>
+    ) : null,
+    education: null,
+    certifications: null,
+    skills: null,
+  };
 
   return (
     <Box sx={{ fontFamily: f, display: "flex", height: "100%", minHeight: 842 }}>
@@ -504,38 +790,17 @@ function ModernCV({ data }: { data: ResumeData }) {
         <Typography sx={{ fontFamily: f, fontSize: 22, fontWeight: 800, color: c }}>
           {data.name || "Your Name"}
         </Typography>
-        <Typography sx={{ fontFamily: f, fontSize: 12, color: "text.secondary", mb: 1 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 12, color: tc, mb: 1 }}>
           {data.title || "Job Title"}
         </Typography>
         <Box sx={{ height: 2.5, bgcolor: c, borderRadius: 2, mb: 2 }} />
 
-        {data.summary && (
-          <Box sx={{ mb: 2 }}>
-            <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: c, mb: 0.5 }}>
-              Profile
-            </Typography>
-            <Typography sx={{ fontFamily: f, fontSize: 8.5, color: "text.secondary", lineHeight: 1.6 }}>{data.summary}</Typography>
-          </Box>
-        )}
-
-        {filledExp.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: c, mb: 0.8 }}>
-              Experience
-            </Typography>
-            {filledExp.map((exp, i) => (
-              <Box key={i} sx={{ mb: 1.5, borderLeft: `2px solid ${c}`, pl: 1.2 }}>
-                <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700 }}>{exp.position}</Typography>
-                <Typography sx={{ fontFamily: f, fontSize: 8.5, color: c, fontWeight: 600 }}>{exp.company}</Typography>
-                {(exp.startDate || exp.endDate) && (
-                  <Typography sx={{ fontFamily: f, fontSize: 7.5, color: "text.secondary" }}>{exp.startDate} — {exp.endDate}</Typography>
-                )}
-                {exp.description && (
-                  <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary", mt: 0.3, lineHeight: 1.5 }}>{exp.description}</Typography>
-                )}
-              </Box>
-            ))}
-          </Box>
+        {showPlaceholder ? (
+          <PlaceholderContent color={tc} accentColor={c} font={f} />
+        ) : (
+          data.sectionOrder
+            .filter((key) => key === "summary" || key === "experience")
+            .map((key) => sectionRenderers[key])
         )}
       </Box>
     </Box>
@@ -544,15 +809,97 @@ function ModernCV({ data }: { data: ResumeData }) {
 
 function ClassicCV({ data }: { data: ResumeData }) {
   const c = data.color;
+  const tc = data.textColor;
   const f = data.font;
   const filledExp = data.experience.filter(hasContent);
   const filledEdu = data.education.filter(hasEduContent);
   const filledCert = data.certifications.filter(hasCertContent);
   const hasContact = data.email || data.phone || data.location;
 
+  const sectionRenderers: Record<SectionKey, React.ReactNode> = {
+    summary: data.summary ? (
+      <Box key="summary" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
+          Professional Summary
+        </Typography>
+        <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
+        <Typography sx={{ fontFamily: f, fontSize: 8.5, color: tc, lineHeight: 1.6 }}>{data.summary}</Typography>
+      </Box>
+    ) : null,
+    experience: filledExp.length > 0 ? (
+      <Box key="experience" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
+          Experience
+        </Typography>
+        <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
+        {filledExp.map((exp, i) => (
+          <Box key={i} sx={{ mb: 1.2 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+              <Typography sx={{ fontFamily: f, fontSize: 9.5, fontWeight: 700, color: tc }}>
+                {exp.position}{exp.company ? ` — ${exp.company}` : ""}
+              </Typography>
+              {(exp.startDate || exp.endDate) && (
+                <Typography sx={{ fontFamily: f, fontSize: 8, color: tc, flexShrink: 0, ml: 1 }}>
+                  {exp.startDate} – {exp.endDate}
+                </Typography>
+              )}
+            </Box>
+            {exp.description && (
+              <Typography sx={{ fontFamily: f, fontSize: 8, color: tc, mt: 0.3, lineHeight: 1.5 }}>{exp.description}</Typography>
+            )}
+          </Box>
+        ))}
+      </Box>
+    ) : null,
+    education: filledEdu.length > 0 ? (
+      <Box key="education" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
+          Education
+        </Typography>
+        <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
+        {filledEdu.map((edu, i) => (
+          <Box key={i} sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+            <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 600, color: tc }}>
+              {edu.degree}{edu.school ? ` — ${edu.school}` : ""}
+            </Typography>
+            {edu.year && <Typography sx={{ fontFamily: f, fontSize: 8, color: tc }}>{edu.year}</Typography>}
+          </Box>
+        ))}
+      </Box>
+    ) : null,
+    certifications: filledCert.length > 0 ? (
+      <Box key="certifications" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
+          Certifications
+        </Typography>
+        <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
+        {filledCert.map((cert, i) => (
+          <Box key={i} sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+            <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 600, color: tc }}>
+              {cert.name}{cert.issuer ? ` — ${cert.issuer}` : ""}
+            </Typography>
+            {cert.year && <Typography sx={{ fontFamily: f, fontSize: 8, color: tc }}>{cert.year}</Typography>}
+          </Box>
+        ))}
+      </Box>
+    ) : null,
+    skills: data.skills.length > 0 ? (
+      <Box key="skills">
+        <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
+          Skills
+        </Typography>
+        <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
+        <Typography sx={{ fontFamily: f, fontSize: 8.5, color: tc }}>
+          {data.skills.join("  •  ")}
+        </Typography>
+      </Box>
+    ) : null,
+  };
+
+  const showPlaceholder = !hasRealContent(data);
+
   return (
     <Box sx={{ fontFamily: f, p: 3.5, minHeight: 842 }}>
-      {/* Header: Photo + Name + Title */}
       <Box sx={{ textAlign: "center", mb: 1 }}>
         {data.photo && (
           <Avatar src={data.photo} sx={{ width: 80, height: 80, mx: "auto", mb: 1, border: `3px solid ${c}` }} />
@@ -560,107 +907,25 @@ function ClassicCV({ data }: { data: ResumeData }) {
         <Typography sx={{ fontFamily: f, fontSize: 24, fontWeight: 800, color: c }}>
           {data.name || "Your Name"}
         </Typography>
-        <Typography sx={{ fontFamily: f, fontSize: 12, color: "text.secondary" }}>
+        <Typography sx={{ fontFamily: f, fontSize: 12, color: tc }}>
           {data.title || "Job Title"}
         </Typography>
       </Box>
 
-      {/* Contact row */}
       {hasContact && (
         <Stack direction="row" spacing={2} justifyContent="center" mb={1} flexWrap="wrap">
-          {data.email && <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary" }}>{data.email}</Typography>}
-          {data.phone && <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary" }}>{data.phone}</Typography>}
-          {data.location && <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary" }}>{data.location}</Typography>}
+          {data.email && <Typography sx={{ fontFamily: f, fontSize: 8, color: tc }}>{data.email}</Typography>}
+          {data.phone && <Typography sx={{ fontFamily: f, fontSize: 8, color: tc }}>{data.phone}</Typography>}
+          {data.location && <Typography sx={{ fontFamily: f, fontSize: 8, color: tc }}>{data.location}</Typography>}
         </Stack>
       )}
 
       <Box sx={{ height: 2, bgcolor: c, mb: 2 }} />
 
-      {/* Summary */}
-      {data.summary && (
-        <Box sx={{ mb: 2 }}>
-          <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
-            Professional Summary
-          </Typography>
-          <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
-          <Typography sx={{ fontFamily: f, fontSize: 8.5, color: "text.secondary", lineHeight: 1.6 }}>{data.summary}</Typography>
-        </Box>
-      )}
-
-      {/* Experience */}
-      {filledExp.length > 0 && (
-        <Box sx={{ mb: 2 }}>
-          <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
-            Experience
-          </Typography>
-          <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
-          {filledExp.map((exp, i) => (
-            <Box key={i} sx={{ mb: 1.2 }}>
-              <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                <Typography sx={{ fontFamily: f, fontSize: 9.5, fontWeight: 700 }}>
-                  {exp.position}{exp.company ? ` — ${exp.company}` : ""}
-                </Typography>
-                {(exp.startDate || exp.endDate) && (
-                  <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary", flexShrink: 0, ml: 1 }}>
-                    {exp.startDate} – {exp.endDate}
-                  </Typography>
-                )}
-              </Box>
-              {exp.description && (
-                <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary", mt: 0.3, lineHeight: 1.5 }}>{exp.description}</Typography>
-              )}
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      {/* Education */}
-      {filledEdu.length > 0 && (
-        <Box sx={{ mb: 2 }}>
-          <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
-            Education
-          </Typography>
-          <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
-          {filledEdu.map((edu, i) => (
-            <Box key={i} sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-              <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 600 }}>
-                {edu.degree}{edu.school ? ` — ${edu.school}` : ""}
-              </Typography>
-              {edu.year && <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary" }}>{edu.year}</Typography>}
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      {/* Certifications */}
-      {filledCert.length > 0 && (
-        <Box sx={{ mb: 2 }}>
-          <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
-            Certifications
-          </Typography>
-          <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
-          {filledCert.map((cert, i) => (
-            <Box key={i} sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-              <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 600 }}>
-                {cert.name}{cert.issuer ? ` — ${cert.issuer}` : ""}
-              </Typography>
-              {cert.year && <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary" }}>{cert.year}</Typography>}
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      {/* Skills */}
-      {data.skills.length > 0 && (
-        <Box>
-          <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: c, mb: 0.3 }}>
-            Skills
-          </Typography>
-          <Box sx={{ height: 1, bgcolor: "grey.200", mb: 0.8 }} />
-          <Typography sx={{ fontFamily: f, fontSize: 8.5, color: "text.secondary" }}>
-            {data.skills.join("  •  ")}
-          </Typography>
-        </Box>
+      {showPlaceholder ? (
+        <PlaceholderContent color={tc} accentColor={c} font={f} />
+      ) : (
+        data.sectionOrder.map((key) => sectionRenderers[key])
       )}
     </Box>
   );
@@ -668,15 +933,76 @@ function ClassicCV({ data }: { data: ResumeData }) {
 
 function CreativeCV({ data }: { data: ResumeData }) {
   const c = data.color;
+  const tc = data.textColor;
   const f = data.font;
   const cLight = c + "18";
   const filledExp = data.experience.filter(hasContent);
   const filledEdu = data.education.filter(hasEduContent);
   const filledCert = data.certifications.filter(hasCertContent);
+  const showPlaceholder = !hasRealContent(data);
+
+  const sectionRenderers: Record<SectionKey, React.ReactNode> = {
+    summary: data.summary ? (
+      <Box key="summary" sx={{ mb: 2, p: 1.5, bgcolor: cLight, borderRadius: 2, borderLeft: `3px solid ${c}` }}>
+        <Typography sx={{ fontFamily: f, fontSize: 8.5, color: tc, lineHeight: 1.6 }}>{data.summary}</Typography>
+      </Box>
+    ) : null,
+    skills: data.skills.length > 0 ? (
+      <Box key="skills" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, color: c, mb: 0.8 }}>Skills</Typography>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+          {data.skills.map((s) => (
+            <Box key={s} sx={{ px: 1, py: 0.3, bgcolor: cLight, borderRadius: 4, fontSize: 8, fontWeight: 600, color: c }}>{s}</Box>
+          ))}
+        </Box>
+      </Box>
+    ) : null,
+    experience: filledExp.length > 0 ? (
+      <Box key="experience" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, color: c, mb: 0.8 }}>Experience</Typography>
+        {filledExp.map((exp, i) => (
+          <Box key={i} sx={{ mb: 1.5, position: "relative", pl: 1.5 }}>
+            <Box sx={{ position: "absolute", left: 0, top: 4, width: 6, height: 6, borderRadius: "50%", bgcolor: c }} />
+            <Typography sx={{ fontFamily: f, fontSize: 9.5, fontWeight: 700, color: tc }}>{exp.position}</Typography>
+            <Typography sx={{ fontFamily: f, fontSize: 8.5, color: c, fontWeight: 600 }}>{exp.company}</Typography>
+            {(exp.startDate || exp.endDate) && (
+              <Typography sx={{ fontFamily: f, fontSize: 7, color: tc }}>{exp.startDate} — {exp.endDate}</Typography>
+            )}
+            {exp.description && (
+              <Typography sx={{ fontFamily: f, fontSize: 7.5, color: tc, mt: 0.3, lineHeight: 1.5 }}>{exp.description}</Typography>
+            )}
+          </Box>
+        ))}
+      </Box>
+    ) : null,
+    education: filledEdu.length > 0 ? (
+      <Box key="education" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, color: c, mb: 0.8 }}>Education</Typography>
+        {filledEdu.map((edu, i) => (
+          <Box key={i} sx={{ mb: 1 }}>
+            <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 700, color: tc }}>{edu.degree}</Typography>
+            <Typography sx={{ fontFamily: f, fontSize: 8, color: tc }}>{edu.school}</Typography>
+            {edu.year && <Typography sx={{ fontFamily: f, fontSize: 7.5, color: c }}>{edu.year}</Typography>}
+          </Box>
+        ))}
+      </Box>
+    ) : null,
+    certifications: filledCert.length > 0 ? (
+      <Box key="certifications" sx={{ mb: 2 }}>
+        <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, color: c, mb: 0.8 }}>Certifications</Typography>
+        {filledCert.map((cert, i) => (
+          <Box key={i} sx={{ mb: 1 }}>
+            <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 700, color: tc }}>{cert.name}</Typography>
+            <Typography sx={{ fontFamily: f, fontSize: 8, color: tc }}>{cert.issuer}</Typography>
+            {cert.year && <Typography sx={{ fontFamily: f, fontSize: 7.5, color: c }}>{cert.year}</Typography>}
+          </Box>
+        ))}
+      </Box>
+    ) : null,
+  };
 
   return (
     <Box sx={{ fontFamily: f, minHeight: 842 }}>
-      {/* Gradient header */}
       <Box
         sx={{
           background: `linear-gradient(135deg, ${c} 0%, ${c}CC 100%)`,
@@ -706,77 +1032,11 @@ function CreativeCV({ data }: { data: ResumeData }) {
       </Box>
 
       <Box sx={{ p: 3 }}>
-        {/* Summary */}
-        {data.summary && (
-          <Box sx={{ mb: 2, p: 1.5, bgcolor: cLight, borderRadius: 2, borderLeft: `3px solid ${c}` }}>
-            <Typography sx={{ fontFamily: f, fontSize: 8.5, color: "text.secondary", lineHeight: 1.6 }}>{data.summary}</Typography>
-          </Box>
+        {showPlaceholder ? (
+          <PlaceholderContent color={tc} accentColor={c} font={f} />
+        ) : (
+          data.sectionOrder.map((key) => sectionRenderers[key])
         )}
-
-        {/* Skills pills */}
-        {data.skills.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, color: c, mb: 0.8 }}>Skills</Typography>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-              {data.skills.map((s) => (
-                <Box key={s} sx={{ px: 1, py: 0.3, bgcolor: cLight, borderRadius: 4, fontSize: 8, fontWeight: 600, color: c }}>{s}</Box>
-              ))}
-            </Box>
-          </Box>
-        )}
-
-        <Grid container spacing={2}>
-          {/* Left column */}
-          <Grid size={7}>
-            {filledExp.length > 0 && (
-              <Box sx={{ mb: 2 }}>
-                <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, color: c, mb: 0.8 }}>Experience</Typography>
-                {filledExp.map((exp, i) => (
-                  <Box key={i} sx={{ mb: 1.5, position: "relative", pl: 1.5 }}>
-                    <Box sx={{ position: "absolute", left: 0, top: 4, width: 6, height: 6, borderRadius: "50%", bgcolor: c }} />
-                    <Typography sx={{ fontFamily: f, fontSize: 9.5, fontWeight: 700 }}>{exp.position}</Typography>
-                    <Typography sx={{ fontFamily: f, fontSize: 8.5, color: c, fontWeight: 600 }}>{exp.company}</Typography>
-                    {(exp.startDate || exp.endDate) && (
-                      <Typography sx={{ fontFamily: f, fontSize: 7, color: "text.secondary" }}>{exp.startDate} — {exp.endDate}</Typography>
-                    )}
-                    {exp.description && (
-                      <Typography sx={{ fontFamily: f, fontSize: 7.5, color: "text.secondary", mt: 0.3, lineHeight: 1.5 }}>{exp.description}</Typography>
-                    )}
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Grid>
-
-          {/* Right column */}
-          <Grid size={5}>
-            {filledEdu.length > 0 && (
-              <Box sx={{ mb: 2 }}>
-                <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, color: c, mb: 0.8 }}>Education</Typography>
-                {filledEdu.map((edu, i) => (
-                  <Box key={i} sx={{ mb: 1 }}>
-                    <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 700 }}>{edu.degree}</Typography>
-                    <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary" }}>{edu.school}</Typography>
-                    {edu.year && <Typography sx={{ fontFamily: f, fontSize: 7.5, color: c }}>{edu.year}</Typography>}
-                  </Box>
-                ))}
-              </Box>
-            )}
-
-            {filledCert.length > 0 && (
-              <Box>
-                <Typography sx={{ fontFamily: f, fontSize: 10, fontWeight: 700, color: c, mb: 0.8 }}>Certifications</Typography>
-                {filledCert.map((cert, i) => (
-                  <Box key={i} sx={{ mb: 1 }}>
-                    <Typography sx={{ fontFamily: f, fontSize: 9, fontWeight: 700 }}>{cert.name}</Typography>
-                    <Typography sx={{ fontFamily: f, fontSize: 8, color: "text.secondary" }}>{cert.issuer}</Typography>
-                    {cert.year && <Typography sx={{ fontFamily: f, fontSize: 7.5, color: c }}>{cert.year}</Typography>}
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Grid>
-        </Grid>
       </Box>
     </Box>
   );
@@ -805,6 +1065,7 @@ export default function BuilderPage() {
 
   const [data, setData] = useState<ResumeData>({
     color: "#1565C0",
+    textColor: "#333333",
     font: "Roboto, sans-serif",
     name: "",
     title: "",
@@ -817,6 +1078,7 @@ export default function BuilderPage() {
     education: [],
     certifications: [],
     skills: [],
+    sectionOrder: [...DEFAULT_SECTION_ORDER],
   });
 
   useEffect(() => {
@@ -824,7 +1086,15 @@ export default function BuilderPage() {
     fetch(`/api/resume/${resumeId}`)
       .then((res) => { if (!res.ok) throw new Error(); return res.json(); })
       .then(({ resume }) => {
-        if (resume?.data) setData(resume.data as ResumeData);
+        if (resume?.data) {
+          const loaded = resume.data as Partial<ResumeData>;
+          setData((prev) => ({
+            ...prev,
+            ...loaded,
+            textColor: loaded.textColor || "#333333",
+            sectionOrder: loaded.sectionOrder || [...DEFAULT_SECTION_ORDER],
+          }));
+        }
       })
       .catch(() => {});
   }, [resumeId]);
@@ -904,6 +1174,7 @@ export default function BuilderPage() {
     <EducationStep key="edu" data={data} onChange={update} />,
     <CertificationsStep key="cert" data={data} onChange={update} />,
     <SkillsStep key="skills" data={data} onChange={update} />,
+    <LayoutStep key="layout" data={data} onChange={update} />,
   ];
 
   return (
