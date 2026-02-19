@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
+import { removeBackground } from "@imgly/background-removal";
 import {
   DndContext,
   closestCenter,
@@ -55,6 +56,7 @@ import SaveIcon from "@mui/icons-material/Save";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import ViewListIcon from "@mui/icons-material/ViewList";
 import DashboardIcon from "@mui/icons-material/Dashboard";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 import EmailIcon from "@mui/icons-material/Email";
@@ -341,6 +343,9 @@ function AboutStep({ data, onChange }: { data: ResumeData; onChange: OnChange })
 
 function PhotoStep({ data, onChange }: { data: ResumeData; onChange: OnChange }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [removingBg, setRemovingBg] = useState(false);
+  const [bgProgress, setBgProgress] = useState("");
+
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -348,6 +353,35 @@ function PhotoStep({ data, onChange }: { data: ResumeData; onChange: OnChange })
     reader.onload = () => onChange({ photo: reader.result as string });
     reader.readAsDataURL(file);
   }
+
+  const handleRemoveBg = useCallback(async () => {
+    if (!data.photo) return;
+    setRemovingBg(true);
+    setBgProgress("Loading AI model...");
+    try {
+      const res = await fetch(data.photo);
+      const blob = await res.blob();
+      setBgProgress("Removing background...");
+      const resultBlob = await removeBackground(blob, {
+        progress: (key: string, current: number, total: number) => {
+          if (key === "compute:inference") {
+            const pct = Math.round((current / total) * 100);
+            setBgProgress(`Processing... ${pct}%`);
+          }
+        },
+      });
+      const reader = new FileReader();
+      reader.onload = () => {
+        onChange({ photo: reader.result as string });
+        setRemovingBg(false);
+        setBgProgress("");
+      };
+      reader.readAsDataURL(resultBlob);
+    } catch {
+      setRemovingBg(false);
+      setBgProgress("");
+    }
+  }, [data.photo, onChange]);
 
   return (
     <Box>
@@ -358,20 +392,71 @@ function PhotoStep({ data, onChange }: { data: ResumeData; onChange: OnChange })
         Upload a professional photo. This is optional but recommended.
       </Typography>
       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-        <Avatar src={data.photo || undefined} sx={{ width: 140, height: 140, bgcolor: "grey.200" }}>
-          {!data.photo && <PhotoCameraIcon sx={{ fontSize: 48, color: "grey.400" }} />}
-        </Avatar>
+        <Box sx={{ position: "relative" }}>
+          <Avatar
+            src={data.photo || undefined}
+            sx={{
+              width: 140,
+              height: 140,
+              bgcolor: "grey.200",
+              border: data.photo ? "3px solid" : "none",
+              borderColor: "primary.main",
+            }}
+          >
+            {!data.photo && <PhotoCameraIcon sx={{ fontSize: 48, color: "grey.400" }} />}
+          </Avatar>
+          {removingBg && (
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: "50%",
+                bgcolor: "rgba(0,0,0,0.6)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 0.5,
+              }}
+            >
+              <CircularProgress size={32} sx={{ color: "white" }} />
+              <Typography sx={{ color: "white", fontSize: "0.65rem", textAlign: "center", px: 1 }}>
+                {bgProgress}
+              </Typography>
+            </Box>
+          )}
+        </Box>
+
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleFile} />
-        <Stack direction="row" spacing={1}>
-          <Button variant="contained" onClick={() => fileRef.current?.click()}>
+
+        <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center">
+          <Button variant="contained" onClick={() => fileRef.current?.click()} disabled={removingBg}>
             {data.photo ? "Change Photo" : "Upload Photo"}
           </Button>
           {data.photo && (
-            <Button variant="outlined" color="error" onClick={() => onChange({ photo: null })}>
-              Remove
-            </Button>
+            <>
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={removingBg ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+                onClick={handleRemoveBg}
+                disabled={removingBg}
+              >
+                {removingBg ? "Removing..." : "Remove BG"}
+              </Button>
+              <Button variant="outlined" color="error" onClick={() => onChange({ photo: null })} disabled={removingBg}>
+                Remove
+              </Button>
+            </>
           )}
         </Stack>
+
+        {data.photo && !removingBg && (
+          <Typography variant="caption" color="text.secondary" textAlign="center">
+            Use &quot;Remove BG&quot; to automatically remove the background from your photo using AI.
+            First time may take a moment to download the model.
+          </Typography>
+        )}
       </Box>
     </Box>
   );
@@ -396,10 +481,13 @@ function ExperienceStep({ data, onChange }: { data: ResumeData; onChange: OnChan
       <Typography variant="body2" color="text.secondary" mb={3}>Add your relevant work experience, starting with the most recent.</Typography>
       <Stack spacing={3}>
         {data.experience.map((exp, i) => (
-          <Paper key={i} elevation={0} sx={{ p: 2.5, border: "1px solid", borderColor: "grey.200", borderRadius: 2, position: "relative" }}>
-            <IconButton size="small" onClick={() => remove(i)} sx={{ position: "absolute", top: 8, right: 8, color: "error.main" }}>
-              <DeleteIcon fontSize="small" />
-            </IconButton>
+          <Paper key={i} elevation={0} sx={{ p: 2.5, border: "1px solid", borderColor: "grey.200", borderRadius: 2 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
+              <Typography variant="body2" fontWeight={600} color="text.secondary">Experience {i + 1}</Typography>
+              <IconButton size="small" onClick={() => remove(i)} sx={{ color: "error.main", bgcolor: "error.50", "&:hover": { bgcolor: "error.100" } }}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Box>
             <Stack spacing={2}>
               <TextField label="Company" fullWidth size="small" value={exp.company} onChange={(e) => update(i, "company", e.target.value)} />
               <TextField label="Position" fullWidth size="small" value={exp.position} onChange={(e) => update(i, "position", e.target.value)} />
@@ -440,10 +528,13 @@ function EducationStep({ data, onChange }: { data: ResumeData; onChange: OnChang
       <Typography variant="body2" color="text.secondary" mb={3}>Add your educational background.</Typography>
       <Stack spacing={3}>
         {data.education.map((edu, i) => (
-          <Paper key={i} elevation={0} sx={{ p: 2.5, border: "1px solid", borderColor: "grey.200", borderRadius: 2, position: "relative" }}>
-            <IconButton size="small" onClick={() => remove(i)} sx={{ position: "absolute", top: 8, right: 8, color: "error.main" }}>
-              <DeleteIcon fontSize="small" />
-            </IconButton>
+          <Paper key={i} elevation={0} sx={{ p: 2.5, border: "1px solid", borderColor: "grey.200", borderRadius: 2 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
+              <Typography variant="body2" fontWeight={600} color="text.secondary">Education {i + 1}</Typography>
+              <IconButton size="small" onClick={() => remove(i)} sx={{ color: "error.main", bgcolor: "error.50", "&:hover": { bgcolor: "error.100" } }}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Box>
             <Stack spacing={2}>
               <TextField label="School / University" fullWidth size="small" value={edu.school} onChange={(e) => update(i, "school", e.target.value)} />
               <TextField label="Degree" fullWidth size="small" value={edu.degree} onChange={(e) => update(i, "degree", e.target.value)} />
@@ -476,10 +567,13 @@ function CertificationsStep({ data, onChange }: { data: ResumeData; onChange: On
       <Typography variant="body2" color="text.secondary" mb={3}>Add any certifications or licenses you hold.</Typography>
       <Stack spacing={3}>
         {data.certifications.map((cert, i) => (
-          <Paper key={i} elevation={0} sx={{ p: 2.5, border: "1px solid", borderColor: "grey.200", borderRadius: 2, position: "relative" }}>
-            <IconButton size="small" onClick={() => remove(i)} sx={{ position: "absolute", top: 8, right: 8, color: "error.main" }}>
-              <DeleteIcon fontSize="small" />
-            </IconButton>
+          <Paper key={i} elevation={0} sx={{ p: 2.5, border: "1px solid", borderColor: "grey.200", borderRadius: 2 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
+              <Typography variant="body2" fontWeight={600} color="text.secondary">Certification {i + 1}</Typography>
+              <IconButton size="small" onClick={() => remove(i)} sx={{ color: "error.main", bgcolor: "error.50", "&:hover": { bgcolor: "error.100" } }}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Box>
             <Stack spacing={2}>
               <TextField label="Certification Name" fullWidth size="small" value={cert.name} onChange={(e) => update(i, "name", e.target.value)} />
               <TextField label="Issuing Organization" fullWidth size="small" value={cert.issuer} onChange={(e) => update(i, "issuer", e.target.value)} />
