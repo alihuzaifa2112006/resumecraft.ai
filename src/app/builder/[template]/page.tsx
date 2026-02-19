@@ -54,6 +54,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import SaveIcon from "@mui/icons-material/Save";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import ViewListIcon from "@mui/icons-material/ViewList";
+import DashboardIcon from "@mui/icons-material/Dashboard";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 import EmailIcon from "@mui/icons-material/Email";
@@ -1231,6 +1232,13 @@ export default function BuilderPage() {
             {step === STEPS.length - 1 && (
               <>
                 <Button
+                  variant="outlined"
+                  startIcon={<DashboardIcon />}
+                  onClick={() => router.push("/dashboard")}
+                >
+                  Dashboard
+                </Button>
+                <Button
                   variant="contained"
                   startIcon={saving ? <CircularProgress size={18} color="inherit" /> : <SaveIcon />}
                   disabled={saving}
@@ -1278,6 +1286,7 @@ export default function BuilderPage() {
             bgcolor: "white",
             overflow: "hidden",
             flexShrink: 0,
+            borderRadius: 0,
           }}
         >
           <CVTemplate data={data} />
