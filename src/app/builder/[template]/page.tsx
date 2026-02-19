@@ -57,6 +57,7 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import ViewListIcon from "@mui/icons-material/ViewList";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 import EmailIcon from "@mui/icons-material/Email";
@@ -314,7 +315,53 @@ function FontStep({ data, onChange }: { data: ResumeData; onChange: OnChange }) 
   );
 }
 
+function useAIEnhance() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const enhance = useCallback(async (text: string, type: string, jobTitle?: string): Promise<string | null> => {
+    if (!text || text.trim().length < 10) {
+      setError("Please write at least 10 characters before enhancing.");
+      return null;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/ai/enhance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, type, jobTitle }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to enhance");
+      return data.enhanced;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to enhance. Try again.");
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { enhance, loading, error };
+}
+
 function AboutStep({ data, onChange }: { data: ResumeData; onChange: OnChange }) {
+  const { enhance, loading, error } = useAIEnhance();
+  const [preview, setPreview] = useState<string | null>(null);
+
+  async function handleEnhance() {
+    const result = await enhance(data.summary, "summary", data.title);
+    if (result) setPreview(result);
+  }
+
+  function acceptPreview() {
+    if (preview) {
+      onChange({ summary: preview });
+      setPreview(null);
+    }
+  }
+
   return (
     <Box>
       <Typography variant="h5" fontWeight={700} mb={1}>
@@ -335,7 +382,58 @@ function AboutStep({ data, onChange }: { data: ResumeData; onChange: OnChange })
           </Grid>
         </Grid>
         <TextField label="Location / Address" fullWidth value={data.location} onChange={(e) => onChange({ location: e.target.value })} />
-        <TextField label="Professional Summary" fullWidth multiline rows={4} value={data.summary} onChange={(e) => onChange({ summary: e.target.value })} />
+
+        <Box>
+          <TextField label="Professional Summary" fullWidth multiline rows={4} value={data.summary} onChange={(e) => onChange({ summary: e.target.value })} />
+          <Button
+            size="small"
+            startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+            onClick={handleEnhance}
+            disabled={loading || data.summary.trim().length < 10}
+            sx={{
+              mt: 1,
+              background: "linear-gradient(135deg, #6C63FF 0%, #48C6EF 100%)",
+              color: "white",
+              fontWeight: 600,
+              px: 2.5,
+              "&:hover": { background: "linear-gradient(135deg, #5A52E0 0%, #3AB5DE 100%)" },
+              "&.Mui-disabled": { background: "grey.300", color: "grey.500" },
+            }}
+          >
+            {loading ? "Enhancing..." : "Enhance with AI"}
+          </Button>
+          {data.summary.trim().length > 0 && data.summary.trim().length < 10 && (
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+              Write at least 10 characters to use AI
+            </Typography>
+          )}
+          {error && (
+            <Typography variant="caption" color="error" display="block" mt={0.5}>{error}</Typography>
+          )}
+        </Box>
+
+        {preview && (
+          <Paper elevation={0} sx={{ p: 2, border: "2px solid", borderColor: "#6C63FF", borderRadius: 2, bgcolor: "#F7F7FF" }}>
+            <Stack direction="row" spacing={1} alignItems="center" mb={1}>
+              <AutoAwesomeIcon sx={{ color: "#6C63FF", fontSize: 20 }} />
+              <Typography variant="body2" fontWeight={700} color="#6C63FF">AI Enhanced Version</Typography>
+            </Stack>
+            <Typography variant="body2" sx={{ mb: 2, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+              {preview}
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <Button variant="contained" size="small" onClick={acceptPreview} sx={{ background: "linear-gradient(135deg, #6C63FF 0%, #48C6EF 100%)", "&:hover": { background: "linear-gradient(135deg, #5A52E0 0%, #3AB5DE 100%)" } }}>
+                Accept
+              </Button>
+              <Button variant="outlined" size="small" onClick={() => setPreview(null)} sx={{ borderColor: "#6C63FF", color: "#6C63FF" }}>
+                Dismiss
+              </Button>
+              <Button variant="outlined" size="small" onClick={handleEnhance} disabled={loading} sx={{ borderColor: "#6C63FF", color: "#6C63FF" }}>
+                Regenerate
+              </Button>
+            </Stack>
+          </Paper>
+        )}
       </Stack>
     </Box>
   );
@@ -462,6 +560,54 @@ function PhotoStep({ data, onChange }: { data: ResumeData; onChange: OnChange })
   );
 }
 
+function AIDescriptionButton({ text, position, onEnhanced }: { text: string; position: string; onEnhanced: (t: string) => void }) {
+  const { enhance, loading, error } = useAIEnhance();
+  const [preview, setPreview] = useState<string | null>(null);
+
+  async function handleEnhance() {
+    const result = await enhance(text, "experience", position);
+    if (result) setPreview(result);
+  }
+
+  return (
+    <Box>
+      <Button
+        size="small"
+        startIcon={loading ? <CircularProgress size={14} color="inherit" /> : <AutoAwesomeIcon sx={{ fontSize: 16 }} />}
+        onClick={handleEnhance}
+        disabled={loading || text.trim().length < 10}
+        sx={{
+          mt: 0.5,
+          fontSize: "0.75rem",
+          background: "linear-gradient(135deg, #6C63FF 0%, #48C6EF 100%)",
+          color: "white",
+          fontWeight: 600,
+          px: 2,
+          py: 0.5,
+          "&:hover": { background: "linear-gradient(135deg, #5A52E0 0%, #3AB5DE 100%)" },
+          "&.Mui-disabled": { background: "grey.300", color: "grey.500" },
+        }}
+      >
+        {loading ? "Enhancing..." : "Enhance with AI"}
+      </Button>
+      {error && <Typography variant="caption" color="error" display="block" mt={0.5}>{error}</Typography>}
+      {preview && (
+        <Paper elevation={0} sx={{ mt: 1, p: 1.5, border: "2px solid #6C63FF", borderRadius: 2, bgcolor: "#F7F7FF" }}>
+          <Stack direction="row" spacing={0.5} alignItems="center" mb={0.5}>
+            <AutoAwesomeIcon sx={{ color: "#6C63FF", fontSize: 16 }} />
+            <Typography variant="caption" fontWeight={700} color="#6C63FF">AI Enhanced</Typography>
+          </Stack>
+          <Typography variant="body2" sx={{ fontSize: "0.8rem", mb: 1, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{preview}</Typography>
+          <Stack direction="row" spacing={1}>
+            <Button variant="contained" size="small" onClick={() => { onEnhanced(preview); setPreview(null); }} sx={{ fontSize: "0.7rem", background: "linear-gradient(135deg, #6C63FF 0%, #48C6EF 100%)" }}>Accept</Button>
+            <Button variant="outlined" size="small" onClick={() => setPreview(null)} sx={{ fontSize: "0.7rem", borderColor: "#6C63FF", color: "#6C63FF" }}>Dismiss</Button>
+          </Stack>
+        </Paper>
+      )}
+    </Box>
+  );
+}
+
 function ExperienceStep({ data, onChange }: { data: ResumeData; onChange: OnChange }) {
   function update(index: number, field: keyof Experience, value: string) {
     const updated = [...data.experience];
@@ -499,7 +645,10 @@ function ExperienceStep({ data, onChange }: { data: ResumeData; onChange: OnChan
                   <TextField label="End Date" fullWidth size="small" placeholder="e.g. Present" value={exp.endDate} onChange={(e) => update(i, "endDate", e.target.value)} />
                 </Grid>
               </Grid>
-              <TextField label="Description" fullWidth size="small" multiline rows={3} value={exp.description} onChange={(e) => update(i, "description", e.target.value)} />
+              <Box>
+                <TextField label="Description" fullWidth size="small" multiline rows={3} value={exp.description} onChange={(e) => update(i, "description", e.target.value)} />
+                <AIDescriptionButton text={exp.description} position={exp.position} onEnhanced={(t) => update(i, "description", t)} />
+              </Box>
             </Stack>
           </Paper>
         ))}
